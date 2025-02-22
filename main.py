@@ -6,20 +6,20 @@ wyjatki_mesky = {"Kuba", "Barnaba", "Kosma"}
 def rozpoznaj_plec(imie):
     """
     Rozpoznaje płeć na podstawie imienia.
-    Jeśli imię jest w zbiorze wyjątków, zwracamy "Mężczyzna".
-    W przeciwnym wypadku, jeśli imię kończy się na "a", uznajemy je za żeńskie.
+    Jeśli imię jest w wyjątkach, zwraca 'Mężczyzna'.
+    Jeśli imię kończy się na 'a', uznaje je za żeńskie.
+    W innym przypadku zwraca 'Mężczyzna'.
     """
     if imie in wyjatki_mesky:
         return "Mężczyzna"
-    if imie[-1].lower() == "a":
+    if imie and imie[-1].lower() == "a":
         return "Kobieta"
-    else:
-        return "Mężczyzna"
+    return "Mężczyzna"
 
 def transform_name_heuristic(name):
     """
-    Przekształca imię z mianownika do formy wołacza za pomocą heurystyk.
-    Uwaga: Metoda nie obejmuje wszystkich wyjątków języka polskiego.
+    Przekształca imię z mianownika do formy wołacza przy użyciu prostych heurystyk.
+    Uwaga: metoda nie obejmuje wszystkich wyjątków języka polskiego.
     """
     if name.endswith("ek"):
         return name[:-2] + "ku"
@@ -47,13 +47,14 @@ def transform_name_heuristic(name):
         return name + "zie"
     
     vowels = "aeiouyąęóAEIOUYĄĘÓ"
-    if name[-1] not in vowels:
+    if name and name[-1] not in vowels:
         return name + "ie"
     
     return name
 
-input_file = 'input.csv'
-output_file = 'output.csv'
+# Ścieżki do plików CSV
+input_file = 'input.csv'   # Oryginalny plik z kolumnami: Lp., Osoba Decyzyjna, Komórka, Telefon, Email
+output_file = 'output.csv' # Wynikowy plik CSV w formacie wymaganym przez Kit
 
 with open(input_file, newline='', encoding='utf-8') as csvfile_in, \
      open(output_file, 'w', newline='', encoding='utf-8') as csvfile_out:
@@ -61,29 +62,44 @@ with open(input_file, newline='', encoding='utf-8') as csvfile_in, \
     reader = csv.reader(csvfile_in)
     writer = csv.writer(csvfile_out)
     
-    # Zmieniamy nagłówek – zamiast kolumny "Imie" zapisujemy "Forma wołacza"
-    # oraz dodajemy nową kolumnę "Tagi" (płeć)
-    writer.writerow(['Forma wołacza', 'Nazwisko', 'Tagi'])
+    # Nagłówek zgodny z wymaganiami Kit:
+    # First name, Last name, Email address, Tags
+    writer.writerow(['First name', 'Last name', 'Email address', 'Tags'])
     
     for row in reader:
-        # Załóżmy, że pełne imię i nazwisko znajduje się w kolumnie o indeksie 1
-        full_name = row[1].strip()
-        if not full_name:
+        # Pomijamy wiersz nagłówka, jeśli zawiera "Lp."
+        if row[0].strip() == "Lp.":
             continue
         
-        tokens = full_name.split()
-        if len(tokens) >= 2:
+        # Wczytujemy dane z kolumn (resztę ignorujemy):
+        # 0 - Lp. (nieużywane)
+        # 1 - Osoba Decyzyjna
+        # 4 - Email
+        osoba_decyzyjna = row[1].strip() if len(row) > 1 else ""
+        email_address = row[4].strip() if len(row) > 4 else ""
+        
+        # Rozbijamy "Osoba Decyzyjna" na tokeny -> imię (pierwszy), nazwisko (ostatni)
+        tokens = osoba_decyzyjna.split()
+        if tokens:
             imie = tokens[0].capitalize()
             nazwisko = tokens[-1].capitalize()
         else:
-            imie = tokens[0].capitalize()
-            nazwisko = ''
+            imie = ""
+            nazwisko = ""
         
         # Przekształcamy imię do formy wołacza
-        vocative = transform_name_heuristic(imie)
-        # Rozpoznajemy płeć na podstawie imienia (w mianowniku)
-        plec = rozpoznaj_plec(imie)
+        first_name = transform_name_heuristic(imie) if imie else ""
         
-        writer.writerow([vocative, nazwisko, plec])
+        # Rozpoznajemy płeć – jeśli brak imienia, wstawiamy tag "brak imienia"
+        if imie:
+            gender_tag = rozpoznaj_plec(imie)
+        else:
+            gender_tag = "brak imienia"
+        
+        # Tutaj tworzymy listę tagów – w tym przypadku tylko płeć (lub "brak imienia")
+        tags = gender_tag  # jeśli chcesz więcej tagów, możesz je tu dodać i łączyć przecinkiem
+        
+        # Zapisujemy wiersz w formacie wymaganym przez Kit
+        writer.writerow([first_name, nazwisko, email_address, tags])
 
 print("Przetwarzanie CSV zakończone. Wynik zapisany w pliku:", output_file)
