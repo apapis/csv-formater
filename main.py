@@ -6,9 +6,9 @@ wyjatki_mesky = {"Kuba", "Barnaba", "Kosma"}
 def rozpoznaj_plec(imie):
     """
     Rozpoznaje płeć na podstawie imienia.
-    Jeśli imię jest w wyjątkach, zwraca 'Mężczyzna'.
-    Jeśli imię kończy się na 'a', uznaje je za żeńskie.
-    W innym przypadku zwraca 'Mężczyzna'.
+    Jeśli imię jest w wyjątkach, zwraca "Mężczyzna".
+    Jeśli imię kończy się na "a", uznaje je za żeńskie.
+    W innym przypadku zwraca "Mężczyzna".
     """
     if imie in wyjatki_mesky:
         return "Mężczyzna"
@@ -53,8 +53,12 @@ def transform_name_heuristic(name):
     return name
 
 # Ścieżki do plików CSV
-input_file = 'input.csv'   # Oryginalny plik z kolumnami: Lp., Osoba Decyzyjna, Komórka, Telefon, Email
-output_file = 'output.csv' # Wynikowy plik CSV w formacie wymaganym przez Kit
+input_file = 'input.csv'   # Plik oryginalny z kolumnami:
+                           # Lp., Osoba Decyzyjna, Komórka, Telefon, Email,
+                           # Wygląd na komputerze, Wygląd na telefonie, B2B/B2C,
+                           # SSL (kłódka), Możliwości płatności, Szybkość,
+                           # Google Ads, Shopping, Meta Ads, Social Media, Inne
+output_file = 'output.csv' # Plik wynikowy w formacie wymaganym przez Kit
 
 with open(input_file, newline='', encoding='utf-8') as csvfile_in, \
      open(output_file, 'w', newline='', encoding='utf-8') as csvfile_out:
@@ -71,14 +75,27 @@ with open(input_file, newline='', encoding='utf-8') as csvfile_in, \
         if row[0].strip() == "Lp.":
             continue
         
-        # Wczytujemy dane z kolumn (resztę ignorujemy):
-        # 0 - Lp. (nieużywane)
+        # Indeksy:
+        # 0 - Lp.
         # 1 - Osoba Decyzyjna
+        # 2 - Komórka (ignorujemy)
+        # 3 - Telefon (ignorujemy)
         # 4 - Email
+        # 5 - Wygląd na komputerze
+        # 6 - Wygląd na telefonie
+        # 7 - B2B/B2C (pomijamy)
+        # 8 - SSL (kłódka)
+        # 9 - Możliwości płatności
+        # 10 - Szybkość
+        # 11 - Google Ads
+        # 12 - Shopping
+        # 13 - Meta Ads
+        # 14 - Social Media
+        # 15 - Inne
         osoba_decyzyjna = row[1].strip() if len(row) > 1 else ""
         email_address = row[4].strip() if len(row) > 4 else ""
         
-        # Rozbijamy "Osoba Decyzyjna" na tokeny -> imię (pierwszy), nazwisko (ostatni)
+        # Wyodrębniamy imię i nazwisko z "Osoba Decyzyjna"
         tokens = osoba_decyzyjna.split()
         if tokens:
             imie = tokens[0].capitalize()
@@ -96,10 +113,64 @@ with open(input_file, newline='', encoding='utf-8') as csvfile_in, \
         else:
             gender_tag = "brak imienia"
         
-        # Tutaj tworzymy listę tagów – w tym przypadku tylko płeć (lub "brak imienia")
-        tags = gender_tag  # jeśli chcesz więcej tagów, możesz je tu dodać i łączyć przecinkiem
+        # Budujemy listę tagów zaczynając od tagu płci
+        tags_list = [gender_tag]
         
-        # Zapisujemy wiersz w formacie wymaganym przez Kit
+        # Sprawdzamy kolumny 5..15 (od "Wygląd na komputerze" do "Inne")
+        feature_columns = row[5:16]  # uzyskujemy 11 kolumn
+        # Założenie: jeśli któraś kolumna zawiera dokładnie ",", to oznacza, że funkcja jest posiadana
+        has_any_feature = any(col.strip() == ',' for col in feature_columns)
+        if not has_any_feature:
+            tags_list.append("brak strony")
+
+        # Jeśli jest "brak strony", dodajemy dodatkowo tagi "GoogleAds-brak" i "MetaAds-brak"
+        if "brak strony" in tags_list:
+            if "GoogleAds-brak" not in tags_list:
+                tags_list.append("GoogleAds-brak")
+            if "MetaAds-brak" not in tags_list:
+                tags_list.append("MetaAds-brak")
+        
+        # Dodajemy tag "Slaba strona" jeżeli:
+        # - W kolumnie "Wygląd na telefonie" (indeks 6) lub "Wygląd na komputerze" (indeks 5) znajduje się dokładnie "."
+        # - I nie został dodany tag "brak strony"
+        wyglad_telefon = row[6].strip() if len(row) > 6 else ""
+        wyglad_komputera = row[5].strip() if len(row) > 5 else ""
+        if (wyglad_telefon == '.' or wyglad_komputera == '.') and "brak strony" not in tags_list:
+            tags_list.append("Slaba strona")
+        
+        # Dodajemy tag "GoogleAds-brak" jeżeli:
+        # - W kolumnie "Google Ads" (indeks 11) znajduje się dokładnie "."
+        google_ads = row[11].strip() if len(row) > 11 else ""
+        if google_ads == '.':
+            tags_list.append("GoogleAds-brak")
+        
+        # Dodajemy tag "GoogleAds-slabe" jeżeli:
+        # - W kolumnie "Google Ads" (indeks 11) znajduje się dokładnie ","
+        # - W kolumnie "Shopping" (indeks 12) znajduje się dokładnie "."
+        shopping = row[12].strip() if len(row) > 12 else ""
+        if google_ads == ',' and shopping == '.':
+            tags_list.append("GoogleAds-slabe")
+        
+        # Dodajemy tag "MetaAds-brak" jeżeli:
+        # - W kolumnie "Meta Ads" (indeks 13) znajduje się dokładnie "."
+        meta_ads = row[13].strip() if len(row) > 13 else ""
+        if meta_ads == '.':
+            tags_list.append("MetaAds-brak")
+        
+        # Dodajemy tag "Wszystko maja" jeżeli we wszystkich istotnych kolumnach (pomijając B2B/B2C) wartość wynosi dokładnie ","
+        # Kolumny: 5 - Wygląd na komputerze, 6 - Wygląd na telefonie, 8 - SSL (kłódka), 9 - Możliwości płatności,
+        # 10 - Szybkość, 11 - Google Ads, 12 - Shopping, 13 - Meta Ads, 14 - Social Media
+        features_for_wszystko = [row[i].strip() for i in [5, 6, 8, 9, 10, 11, 12, 13, 14] if len(row) > i]
+        if len(features_for_wszystko) == 9 and all(col == ',' for col in features_for_wszystko):
+            tags_list.append("Wszystko maja")
+        
+        # Dodajemy tag "import-1" do każdego wiersza
+        tags_list.append("import-1")
+        
+        # Łączymy tagi przecinkiem
+        tags = ", ".join(tags_list)
+        
+        # Zapisujemy wiersz wynikowy
         writer.writerow([first_name, nazwisko, email_address, tags])
 
 print("Przetwarzanie CSV zakończone. Wynik zapisany w pliku:", output_file)
